@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-KEY_NAME="reverse_proxy"
-SUBNET_ID="subnet-075ae5257b060893c"
+KEY_NAME=$(jq -r .KEY_NAME config.json)
+SUBNET_ID=$(jq -r .SUBNET_ID config.json)
+INBOUND_PORT=$(jq -r .INBOUND_PORT config.json)
+OUTBOUND_PORT=$(jq -r .OUTBOUND_PORT config.json)
 
 echo "Creating EC2 Key Pair..."
 aws ec2 create-key-pair \
@@ -39,6 +41,13 @@ aws ec2 authorize-security-group-ingress \
     --cidr 0.0.0.0/0 \
     --no-cli-pager
 
+aws ec2 authorize-security-group-ingress \
+    --group-id $SG_ID \
+    --protocol tcp \
+    --port $INBOUND_PORT \
+    --cidr 0.0.0.0/0 \
+    --no-cli-pager
+
 echo "Starting EC2 Instance..."
 aws ec2 run-instances \
     --image-id resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 \
@@ -66,21 +75,18 @@ cat << EOF > resources.json
 }
 EOF
 
-echo "Configuring NGINX..."
+echo "Configuring HAProxy..."
 chmod 600 key.pem
-ssh -o 'StrictHostKeyChecking=no' -i key.pem ec2-user@$EC2_PUBLIC 'sudo amazon-linux-extras install nginx1'
+ssh -o 'StrictHostKeyChecking=no' -i key.pem ec2-user@$EC2_PUBLIC 'sudo yum install haproxy -y'
 
-PORT="8080"
+sed "s/INBOUND/$INBOUND_PORT/g" haproxy.template.cfg > haproxy.cfg
+sed -i .old "s/OUTBOUND/$OUTBOUND_PORT/g" haproxy.template.cfg > haproxy.cfg
 
-sed -i .old "s/PORT/$PORT/g" server.conf
-sed -i .old "s/PUBLIC_DNS/$EC2_PUBLIC/g" server.conf
-cat server.conf
-scp -i key.pem server.conf ec2-user@$EC2_PUBLIC:/home/ec2-user
+scp -i key.pem haproxy.cfg ec2-user@$EC2_PUBLIC:/home/ec2-user
+ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.old && sudo rm -rf /etc/haproxy/haproxy.cfg'
+ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo cp /home/ec2-user/haproxy.cfg /etc/haproxy/haproxy.cfg'
 
-ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo cp /home/ec2-user/server.conf /etc/nginx/conf.d/server.conf'
-ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo sed -i "/types_hash_max_size 4096/ a\ \ \ \ server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'
-
-echo "Starting NGINX..."
-ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo service nginx start'
+echo "Starting HAProxy..."
+ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo service haproxy start'
 
 echo "Proxy is ready!"

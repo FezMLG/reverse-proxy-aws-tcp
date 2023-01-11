@@ -1,0 +1,6 @@
+{
+  "KEY_NAME": "reverse_proxy",
+  "SUBNET_ID": "subnet-XXX",
+  "INBOUND_PORT": "XXXX",
+  "OUTBOUND_PORT": "6789"
+}
