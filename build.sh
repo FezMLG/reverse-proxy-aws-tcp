@@ -79,8 +79,9 @@ echo "Configuring HAProxy..."
 chmod 600 key.pem
 ssh -o 'StrictHostKeyChecking=no' -i key.pem ec2-user@$EC2_PUBLIC 'sudo yum install haproxy -y'
 
-sed "s/INBOUND/$INBOUND_PORT/g" haproxy.template.cfg > haproxy.cfg
-sed -i .old "s/OUTBOUND/$OUTBOUND_PORT/g" haproxy.template.cfg > haproxy.cfg
+sed "s/INBOUND/$INBOUND_PORT/g" haproxy.template.cfg > haproxy.cfg.temp
+sed "s/OUTBOUND/$OUTBOUND_PORT/g" haproxy.cfg.temp > haproxy.cfg
+rm haproxy.cfg.temp
 
 scp -i key.pem haproxy.cfg ec2-user@$EC2_PUBLIC:/home/ec2-user
 ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.old && sudo rm -rf /etc/haproxy/haproxy.cfg'
