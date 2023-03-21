@@ -89,5 +89,6 @@ ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo cp /home/ec2-user/haproxy.cfg /etc/hap
 
 echo "Starting HAProxy..."
 ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo service haproxy start'
+ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo service haproxy status'
 
 echo "Proxy is ready!"
