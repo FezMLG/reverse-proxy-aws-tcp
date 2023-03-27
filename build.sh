@@ -2,8 +2,10 @@
 
 KEY_NAME=$(jq -r .KEY_NAME config.json)
 SUBNET_ID=$(jq -r .SUBNET_ID config.json)
-INBOUND_PORT=$(jq -r .INBOUND_PORT config.json)
-OUTBOUND_PORT=$(jq -r .OUTBOUND_PORT config.json)
+INBOUND_PORT_MC=$(jq -r .INBOUND_PORT_MC config.json)
+OUTBOUND_PORT_MC=$(jq -r .OUTBOUND_PORT_MC config.json)
+INBOUND_PORT_PLEX=$(jq -r .INBOUND_PORT_PLEX config.json)
+OUTBOUND_PORT_PLEX=$(jq -r .OUTBOUND_PORT_PLEX config.json)
 
 echo "Creating EC2 Key Pair..."
 aws ec2 create-key-pair \
@@ -44,7 +46,14 @@ aws ec2 authorize-security-group-ingress \
 aws ec2 authorize-security-group-ingress \
     --group-id $SG_ID \
     --protocol tcp \
-    --port $INBOUND_PORT \
+    --port $INBOUND_PORT_MC \
+    --cidr 0.0.0.0/0 \
+    --no-cli-pager
+
+aws ec2 authorize-security-group-ingress \
+    --group-id $SG_ID \
+    --protocol tcp \
+    --port $INBOUND_PORT_PLEX \
     --cidr 0.0.0.0/0 \
     --no-cli-pager
 
@@ -79,8 +88,12 @@ echo "Configuring HAProxy..."
 chmod 600 key.pem
 ssh -o 'StrictHostKeyChecking=no' -i key.pem ec2-user@$EC2_PUBLIC 'sudo yum install haproxy -y'
 
-sed "s/INBOUND/$INBOUND_PORT/g" haproxy.template.cfg > haproxy.cfg.temp
-sed "s/OUTBOUND/$OUTBOUND_PORT/g" haproxy.cfg.temp > haproxy.cfg
+sed "s/INBOUND_PORT_MC/$INBOUND_PORT_MC/g" haproxy.template.cfg > haproxy.cfg.temp.mc
+sed "s/OUTBOUND_PORT_MC/$OUTBOUND_PORT_MC/g" haproxy.cfg.temp.mc > haproxy.cfg.temp
+rm haproxy.cfg.temp.mc
+sed "s/INBOUND_PORT_PLEX/$INBOUND_PORT_PLEX/g" haproxy.cfg.temp > haproxy.cfg.temp.plex
+sed "s/OUTBOUND_PORT_PLEX/$OUTBOUND_PORT_PLEX/g" haproxy.cfg.temp.plex > haproxy.cfg
+rm haproxy.cfg.temp.plex
 rm haproxy.cfg.temp
 
 scp -i key.pem haproxy.cfg ec2-user@$EC2_PUBLIC:/home/ec2-user

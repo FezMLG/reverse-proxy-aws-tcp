@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 PUBLIC_DNS=$(jq -r .EC2_PUBLIC resources.json)
 
 case "$1" in
