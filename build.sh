@@ -2,10 +2,6 @@
 
 KEY_NAME=$(jq -r .KEY_NAME config.json)
 SUBNET_ID=$(jq -r .SUBNET_ID config.json)
-INBOUND_PORT_MC=$(jq -r .INBOUND_PORT_MC config.json)
-OUTBOUND_PORT_MC=$(jq -r .OUTBOUND_PORT_MC config.json)
-INBOUND_PORT_PLEX=$(jq -r .INBOUND_PORT_PLEX config.json)
-OUTBOUND_PORT_PLEX=$(jq -r .OUTBOUND_PORT_PLEX config.json)
 
 echo "Creating EC2 Key Pair..."
 aws ec2 create-key-pair \
@@ -43,19 +39,16 @@ aws ec2 authorize-security-group-ingress \
     --cidr 0.0.0.0/0 \
     --no-cli-pager
 
-aws ec2 authorize-security-group-ingress \
-    --group-id $SG_ID \
-    --protocol tcp \
-    --port $INBOUND_PORT_MC \
-    --cidr 0.0.0.0/0 \
-    --no-cli-pager
+jq -c '.PORTS[]' config.json | while read item; do
+    in_port=$(jq --raw-output '.in' <<< "$item")
 
-aws ec2 authorize-security-group-ingress \
-    --group-id $SG_ID \
-    --protocol tcp \
-    --port $INBOUND_PORT_PLEX \
-    --cidr 0.0.0.0/0 \
-    --no-cli-pager
+    aws ec2 authorize-security-group-ingress \
+        --group-id $SG_ID \
+        --protocol tcp \
+        --port $in_port \
+        --cidr 0.0.0.0/0 \
+        --no-cli-pager
+done
 
 echo "Starting EC2 Instance..."
 aws ec2 run-instances \
@@ -88,13 +81,28 @@ echo "Configuring HAProxy..."
 chmod 600 key.pem
 ssh -o 'StrictHostKeyChecking=no' -i key.pem ec2-user@$EC2_PUBLIC 'sudo yum install haproxy -y'
 
-sed "s/INBOUND_PORT_MC/$INBOUND_PORT_MC/g" haproxy.template.cfg > haproxy.cfg.temp.mc
-sed "s/OUTBOUND_PORT_MC/$OUTBOUND_PORT_MC/g" haproxy.cfg.temp.mc > haproxy.cfg.temp
-rm haproxy.cfg.temp.mc
-sed "s/INBOUND_PORT_PLEX/$INBOUND_PORT_PLEX/g" haproxy.cfg.temp > haproxy.cfg.temp.plex
-sed "s/OUTBOUND_PORT_PLEX/$OUTBOUND_PORT_PLEX/g" haproxy.cfg.temp.plex > haproxy.cfg
-rm haproxy.cfg.temp.plex
-rm haproxy.cfg.temp
+rm -rf haproxy.cfg
+cp haproxy.base.cfg haproxy.cfg
+
+jq -c '.PORTS[]' config.json | while read item; do
+echo -en '\n' >> haproxy.cfg
+
+read -a strarr <<< "$arg"
+
+inport=${strarr[0]}
+outport=${strarr[1]}
+localport=${strarr[2]}
+name=${strarr[3]}
+
+cat << EOF >> haproxy.cfg
+frontend frontend_$name
+    bind :$inport
+    default_backend backend_$name
+
+backend backend_$name
+    server server_$name localhost:$outport
+EOF
+done
 
 scp -i key.pem haproxy.cfg ec2-user@$EC2_PUBLIC:/home/ec2-user
 ssh -i key.pem ec2-user@$EC2_PUBLIC 'sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.old && sudo rm -rf /etc/haproxy/haproxy.cfg'

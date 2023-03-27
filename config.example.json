@@ -1,0 +1,5 @@
+{
+  "KEY_NAME": "reverse_proxy",
+  "SUBNET_ID": "subnet-XXX",
+  "PORTS": [{ "in": "1234", "out": "4321", "local": "5555", "name": "example" }]
+}
